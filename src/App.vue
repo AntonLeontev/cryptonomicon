@@ -191,6 +191,14 @@ export default {
     const response = await f.json();
     this.tickersList = Object.keys(response.Data);
   },
+  mounted: function () {
+    const tickers = localStorage.getItem("tickers");
+
+    if (!tickers) return;
+
+    this.tickers = JSON.parse(tickers);
+    this.tickers.forEach((t) => this.subscribeOnUpdates(t));
+  },
   methods: {
     add() {
       let currentTicker = {
@@ -207,27 +215,16 @@ export default {
       }
 
       this.tickers.push(currentTicker);
-
+      this.saveTickers();
       currentTicker = this.tickers.find((t) => t.name === currentTicker.name);
-      currentTicker.timer = setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=a3b10b7e20102526712f7cef5fb8ce16efe70e2d237337ad78c1df731b1b1caa`
-        );
-        const data = await f.json();
-
-        if (data.Response === "Error") return;
-
-        currentTicker.value =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-
-        this.graph.push(data.USD);
-      }, 3000);
+      this.subscribeOnUpdates(currentTicker);
 
       this.ticker = "";
     },
     handleDelete(tickerToRemove) {
       clearInterval(tickerToRemove.timer);
       this.tickers = this.tickers.filter((t) => t != tickerToRemove);
+      this.saveTickers();
     },
     addCurrentTicker(evt) {
       this.ticker = evt.target.innerHTML.trim();
@@ -237,6 +234,21 @@ export default {
     selectCurrency(t) {
       this.selected = t;
       this.graph = [];
+    },
+    subscribeOnUpdates(ticker) {
+      ticker.timer = setInterval(async () => {
+        const f = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${ticker.name}&tsyms=USD&api_key=a3b10b7e20102526712f7cef5fb8ce16efe70e2d237337ad78c1df731b1b1caa`
+        );
+        const data = await f.json();
+
+        if (data.Response === "Error") return;
+
+        ticker.value =
+          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+
+        if (this.selected) this.graph.push(data.USD);
+      }, 5000);
     },
     normalizeGraph() {
       const maxValue = Math.max(...this.graph);
@@ -259,6 +271,9 @@ export default {
       );
 
       this.coinsList = tickers.slice(0, 4);
+    },
+    saveTickers() {
+      localStorage.setItem("tickers", JSON.stringify(this.tickers));
     },
   },
 };
