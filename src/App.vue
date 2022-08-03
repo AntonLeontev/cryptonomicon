@@ -1,7 +1,7 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
     <div
-      style="display: none"
+      v-if="!tickersList"
       class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
     >
       <svg
@@ -36,6 +36,7 @@
               <input
                 v-model="ticker"
                 @keydown.enter="add"
+                @input="tickerInput"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -44,34 +45,21 @@
               />
             </div>
             <div
-              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
+              v-if="coinsList"
+              class="flex bg-white shadow-md p-1 rounded-md flex-wrap"
             >
               <span
+                v-for="(coin, idx) of coinsList"
+                :key="idx"
                 @click="addCurrentTicker"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                @click="addCurrentTicker"
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                @click="addCurrentTicker"
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                @click="addCurrentTicker"
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                SBC
+                {{ coin }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="isAdded" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -189,35 +177,61 @@ export default {
     return {
       ticker: null,
       tickers: [],
+      tickersList: null,
       selected: null,
       graph: [],
+      isAdded: false,
+      coinsList: null,
     };
+  },
+  created: async function () {
+    const f = await fetch(
+      "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
+    );
+    const response = await f.json();
+    this.tickersList = Object.keys(response.Data);
   },
   methods: {
     add() {
-      const newTicker = {
-        name: this.ticker,
+      let currentTicker = {
+        name: this.ticker.toUpperCase(),
         value: "-",
+        timer: null,
       };
 
-      this.tickers.push(newTicker);
-      setInterval(async () => {
+      if (!this.tickersList.includes(currentTicker.name)) return;
+
+      if (this.tickers.find((t) => t.name === currentTicker.name)) {
+        this.isAdded = true;
+        return;
+      }
+
+      this.tickers.push(currentTicker);
+
+      currentTicker = this.tickers.find((t) => t.name === currentTicker.name);
+      currentTicker.timer = setInterval(async () => {
         const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${newTicker.name}&tsyms=USD&api_key=a3b10b7e20102526712f7cef5fb8ce16efe70e2d237337ad78c1df731b1b1caa`
+          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=a3b10b7e20102526712f7cef5fb8ce16efe70e2d237337ad78c1df731b1b1caa`
         );
         const data = await f.json();
-        this.tickers.find((t) => t.name === newTicker.name).value =
+
+        if (data.Response === "Error") return;
+
+        currentTicker.value =
           data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
 
         this.graph.push(data.USD);
       }, 3000);
+
       this.ticker = "";
     },
     handleDelete(tickerToRemove) {
+      clearInterval(tickerToRemove.timer);
       this.tickers = this.tickers.filter((t) => t != tickerToRemove);
     },
     addCurrentTicker(evt) {
       this.ticker = evt.target.innerHTML.trim();
+      this.coinsList = [];
       this.add();
     },
     selectCurrency(t) {
@@ -231,6 +245,20 @@ export default {
         if (maxValue === minValue) return 5;
         return 5 + ((price - minValue) * 95) / (maxValue - minValue);
       });
+    },
+    tickerInput() {
+      this.isAdded = false;
+
+      if (this.ticker === "") {
+        this.coinsList = [];
+        return;
+      }
+
+      const tickers = this.tickersList.filter((t) =>
+        t.includes(this.ticker.toUpperCase())
+      );
+
+      this.coinsList = tickers.slice(0, 4);
     },
   },
 };
