@@ -45,7 +45,7 @@
               />
             </div>
             <div
-              v-if="coinsList"
+              v-if="coinsList.length > 0"
               class="flex bg-white shadow-md p-1 rounded-md flex-wrap"
             >
               <span
@@ -83,11 +83,43 @@
           Добавить
         </button>
       </section>
+      <section>
+        <hr class="w-full border-t border-gray-600 my-4" />
+        <div class="max-w-xl flex gap-x-2">
+          <input
+            v-model="filter"
+            type="text"
+            name="filter"
+            id="filter"
+            class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md shadow-md"
+            placeholder="Фильтр"
+          />
+          <span> Показано {{ filtered.length }} из {{ tickers.length }} </span>
+        </div>
+        <div class="mt-1 flex gap-x-2">
+          <button
+            v-if="page > 1"
+            @click="page = page - 1"
+            type="button"
+            class="inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Назад
+          </button>
+          <button
+            v-if="hasNextPage"
+            @click="page = page + 1"
+            type="button"
+            class="inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          >
+            Вперед
+          </button>
+        </div>
+      </section>
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
         <dl class="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-3">
           <div
-            v-for="t in tickers"
+            v-for="t in this.filtered"
             :key="t.name"
             @click="selectCurrency(t)"
             class="bg-white overflow-hidden shadow rounded-lg border-4 border-solid cursor-pointer border-transparent"
@@ -181,8 +213,34 @@ export default {
       selected: null,
       graph: [],
       isAdded: false,
-      coinsList: null,
+      coinsList: [],
+      filter: "",
+      page: 1,
+      hasNextPage: false,
     };
+  },
+  watch: {
+    filter() {
+      this.page = 1;
+
+      history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    },
+    page() {
+      history.pushState(
+        null,
+        document.title,
+        `${window.location.pathname}?filter=${this.filter}&page=${this.page}`
+      );
+    },
+  },
+  computed: {
+    filtered: function () {
+      return this.filterTickers();
+    },
   },
   created: async function () {
     const f = await fetch(
@@ -198,6 +256,18 @@ export default {
 
     this.tickers = JSON.parse(tickers);
     this.tickers.forEach((t) => this.subscribeOnUpdates(t));
+
+    const windowData = Object.fromEntries(
+      new URL(window.location).searchParams.entries()
+    );
+
+    if (windowData.filter) {
+      this.filter = windowData.filter;
+    }
+
+    if (windowData.page) {
+      this.page = windowData.page;
+    }
   },
   methods: {
     add() {
@@ -225,6 +295,7 @@ export default {
       clearInterval(tickerToRemove.timer);
       this.tickers = this.tickers.filter((t) => t != tickerToRemove);
       this.saveTickers();
+      this.filterTickers();
     },
     addCurrentTicker(evt) {
       this.ticker = evt.target.innerHTML.trim();
@@ -274,6 +345,19 @@ export default {
     },
     saveTickers() {
       localStorage.setItem("tickers", JSON.stringify(this.tickers));
+    },
+    filterTickers() {
+      const start = (this.page - 1) * 6;
+      const end = this.page * 6;
+
+      let filteredTickers = this.tickers.filter((t) =>
+        t.name.includes(this.filter.toUpperCase())
+      );
+
+      if (filteredTickers.length > end) this.hasNextPage = true;
+      if (filteredTickers.length <= end) this.hasNextPage = false;
+
+      return filteredTickers.slice(start, end);
     },
   },
 };
